@@ -1,0 +1,73 @@
+{% extends 'concerts/base.html' %}
+{% block title %}Artists On Tour{% endblock %}
+{% block content %}
+<h2 class="mb-1">Followed Artists On Tour</h2>
+
+{% if not job_done %}
+    <p class="text-muted-light">
+        Checking your followed artists against Ticketmaster — this can take a little while
+        since each artist is a separate lookup.
+    </p>
+    <div class="progress" style="height: 26px;">
+        <div id="on-tour-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-success"
+             role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+    </div>
+    <p id="on-tour-status" class="text-muted-light small mt-2">Starting…</p>
+
+    <script>
+    (function () {
+        var progressUrl = "{% url 'concerts:on_tour_progress' job_id=job_id %}";
+        var resultsUrl = "{% url 'concerts:on_tour' %}?job={{ job_id }}";
+        var bar = document.getElementById('on-tour-bar');
+        var status = document.getElementById('on-tour-status');
+
+        function poll() {
+            fetch(progressUrl)
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    var pct = data.total > 0 ? Math.round((data.checked / data.total) * 100) : 0;
+                    bar.style.width = pct + '%';
+                    bar.setAttribute('aria-valuenow', pct);
+                    bar.textContent = pct + '%';
+                    status.textContent = data.total > 0
+                        ? 'Checked ' + data.checked + ' of ' + data.total + ' artists…'
+                        : 'Loading your followed artists…';
+                    if (data.done) {
+                        window.location.href = resultsUrl;
+                    } else {
+                        setTimeout(poll, 700);
+                    }
+                })
+                .catch(function () { setTimeout(poll, 1500); });
+        }
+        poll();
+    })();
+    </script>
+{% else %}
+    <p class="text-muted-light">
+        Checked {{ artists_checked }} of your followed artists against Ticketmaster.
+        {{ on_tour_artists|length }} of them have upcoming shows. Click an artist for their full schedule.
+        <a href="{% url 'concerts:on_tour' %}?recheck=1">Check again</a>
+    </p>
+
+    <div class="row row-cols-2 row-cols-md-4 row-cols-lg-5 g-3 mt-2">
+        {% for artist in on_tour_artists %}
+        <div class="col">
+            <a href="{% url 'concerts:artist_schedule' attraction_id=artist.attraction.id %}" class="text-decoration-none">
+                <div class="card h-100 text-light">
+                    {% if artist.image %}
+                    <img src="{{ artist.image }}" class="card-img-top" alt="{{ artist.name }}">
+                    {% endif %}
+                    <div class="card-body">
+                        <h6 class="card-title">{{ artist.name }}</h6>
+                        <span class="badge bg-success">{{ artist.attraction.upcoming_event_count }} upcoming show{{ artist.attraction.upcoming_event_count|pluralize }}</span>
+                    </div>
+                </div>
+            </a>
+        </div>
+        {% empty %}
+        <p>None of your followed artists currently have upcoming shows on Ticketmaster.</p>
+        {% endfor %}
+    </div>
+{% endif %}
+{% endblock %}

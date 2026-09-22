@@ -1,0 +1,28 @@
+{% extends 'concerts/base.html' %}
+{% block title %}Concert Finder{% endblock %}
+{% block content %}
+{% if logged_in %}
+    <div class="card p-4">
+        <h3>Welcome back{% if profile %}, {{ profile.display_name }}{% endif %}!</h3>
+        <p class="text-muted-light">You're logged into Spotify. What would you like to do?</p>
+        <div class="d-flex gap-2 flex-wrap mt-3">
+            <a href="{% url 'concerts:favorite_artists' %}" class="btn btn-outline-light">My favorite artists</a>
+            <a href="{% url 'concerts:followed_artists' %}" class="btn btn-outline-light">My followed artists</a>
+            <a href="{% url 'concerts:on_tour' %}" class="btn btn-outline-light">Who's on tour</a>
+            <a href="{% url 'concerts:search' %}" class="btn btn-outline-light">Search concerts near a city</a>
+        </div>
+    </div>
+{% else %}
+    <div class="card p-5 text-center">
+        <h2>Find concerts by the artists you actually listen to</h2>
+        <p class="text-muted-light col-md-8 mx-auto">
+            Log in with Spotify to pull your top and followed artists, see which of
+            your followed artists are currently touring, and search for their
+            upcoming shows near any city.
+        </p>
+        <div>
+            <a href="{% url 'concerts:login' %}" class="btn btn-spotify btn-lg mt-3">Log in with Spotify</a>
+        </div>
+    </div>
+{% endif %}
+{% endblock %}

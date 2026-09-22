@@ -1,0 +1,30 @@
+{% extends 'concerts/base.html' %}
+{% block title %}Favorite Artists{% endblock %}
+{% block content %}
+<h2 class="mb-1">Your Favorite Artists</h2>
+<p class="text-muted-light">
+    Based on your Spotify top artists, medium-term listening history ({{ total_artists }} total).
+</p>
+<div class="row row-cols-2 row-cols-md-4 row-cols-lg-5 g-3">
+    {% for artist in page_obj %}
+    <div class="col">
+        <div class="card h-100">
+            {% if artist.image %}
+            <img src="{{ artist.image }}" class="card-img-top" alt="{{ artist.name }}">
+            {% endif %}
+            <div class="card-body">
+                <h6 class="card-title">{{ artist.name }}</h6>
+                <p class="card-text small text-muted-light">{{ artist.genres|slice:":2"|join:", " }}</p>
+                {% if artist.spotify_url %}
+                <a href="{{ artist.spotify_url }}" target="_blank" class="small">Open in Spotify</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <p>No top artists found — try listening to more music on Spotify first!</p>
+    {% endfor %}
+</div>
+
+{% include 'concerts/_pagination.html' %}
+{% endblock %}

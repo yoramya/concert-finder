@@ -1,0 +1,35 @@
+# Render Blueprint — lets Render auto-configure this service when you
+# connect the GitHub repo via "New > Blueprint". Secrets (marked
+# `sync: false`) are NOT stored here; Render will prompt you to type them
+# in during setup instead.
+services:
+  - type: web
+    name: concert-finder
+    runtime: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate"
+    # --workers 1 is deliberate, not a typo: the "Who's On Tour" progress
+    # bar relies on Django's in-process LocMemCache and a background
+    # thread being visible to later requests. Multiple gunicorn *worker
+    # processes* don't share memory, which would silently break it.
+    # --threads 4 still gives real concurrency within that one process.
+    startCommand: "gunicorn concert_finder.wsgi:application --workers 1 --threads 4 --timeout 60"
+    envVars:
+      - key: DJANGO_DEBUG
+        value: "False"
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: SPOTIFY_CLIENT_ID
+        sync: false
+      - key: SPOTIFY_CLIENT_SECRET
+        sync: false
+      - key: SPOTIFY_REDIRECT_URI
+        sync: false
+      - key: TICKETMASTER_API_KEY
+        sync: false
+      - key: FAVORITE_ARTISTS_LIMIT
+        value: "200"
+      - key: FOLLOWED_ARTISTS_LIMIT
+        value: "200"
+      - key: ARTISTS_PER_PAGE
+        value: "20"

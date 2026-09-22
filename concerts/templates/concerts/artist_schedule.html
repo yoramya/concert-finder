@@ -1,0 +1,25 @@
+{% extends 'concerts/base.html' %}
+{% block title %}{{ artist_name }} — Tour Schedule{% endblock %}
+{% block content %}
+<a href="{% url 'concerts:on_tour' %}" class="d-inline-block mb-3">&larr; Back to On Tour</a>
+<h2 class="mb-4">{{ artist_name }} — Upcoming Shows</h2>
+
+<div class="list-group">
+    {% for event in events %}
+    <a href="{{ event.url }}" target="_blank" class="list-group-item list-group-item-action bg-dark text-light border-secondary mb-2">
+        <div class="d-flex justify-content-between">
+            <div>
+                <div class="fw-bold">{{ event.date }}{% if event.time and not event.time_tbd %} at {{ event.time }}{% endif %}</div>
+                <div>{{ event.venue.name }}</div>
+                <div class="text-muted-light small">{{ event.venue.city }}{% if event.venue.state %}, {{ event.venue.state }}{% endif %} {{ event.venue.country }}</div>
+            </div>
+            <div class="align-self-center">
+                <span class="btn btn-sm btn-outline-light">Tickets &rarr;</span>
+            </div>
+        </div>
+    </a>
+    {% empty %}
+    <p>No upcoming shows found for this artist.</p>
+    {% endfor %}
+</div>
+{% endblock %}

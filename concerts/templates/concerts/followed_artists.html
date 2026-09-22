@@ -1,0 +1,41 @@
+{% extends 'concerts/base.html' %}
+{% block title %}Followed Artists{% endblock %}
+{% block content %}
+<h2 class="mb-1">Your Followed Artists</h2>
+<p class="text-muted-light">
+    Artists you follow on Spotify ({{ total_artists }} total). Unfollowing here unfollows them on Spotify too.
+</p>
+<div class="row row-cols-2 row-cols-md-4 row-cols-lg-5 g-3">
+    {% for artist in page_obj %}
+    <div class="col">
+        <div class="card h-100">
+            {% if artist.image %}
+            <img src="{{ artist.image }}" class="card-img-top" alt="{{ artist.name }}">
+            {% endif %}
+            <div class="card-body">
+                <h6 class="card-title">{{ artist.name }}</h6>
+                <p class="card-text small text-muted-light">{{ artist.genres|slice:":2"|join:", " }}</p>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    {% if artist.spotify_url %}
+                    <a href="{{ artist.spotify_url }}" target="_blank" class="small">Open in Spotify</a>
+                    {% endif %}
+                    <form method="post" action="{% url 'concerts:unfollow_artist' artist_id=artist.id %}"
+                          onsubmit="return confirm('Unfollow {{ artist.name|escapejs }} on Spotify?');">
+                        {% csrf_token %}
+                        <input type="hidden" name="artist_name" value="{{ artist.name }}">
+                        <input type="hidden" name="page" value="{{ page_obj.number }}">
+                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Remove from my Spotify Followed Artists">
+                            Unfollow
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <p>You're not following any artists on Spotify yet.</p>
+    {% endfor %}
+</div>
+
+{% include 'concerts/_pagination.html' %}
+{% endblock %}
