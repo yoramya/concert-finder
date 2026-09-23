@@ -210,31 +210,30 @@ def search_events_by_location(city, radius, unit, start_date, end_date, max_page
     return all_events
 
 
-NAME_SIMILARITY_CUTOFF = 0.6  # same threshold used in _best_attraction_match, for consistency
-
-
 def filter_events_by_artists(events, artist_names):
-    """Keep only events whose lineup includes one of the given artist names."""
+    """
+    Keep only events whose lineup includes one of the given artist names —
+    exact (case-insensitive) matches only.
+
+    This used to also fall back to fuzzy/substring matching for minor name
+    variants (e.g. "Bruce Springsteen" vs "Bruce Springsteen & The E Street
+    Band"), but in practice that produced far more false positives than
+    real matches once scanning hundreds of events against a whole followed
+    list: e.g. "manchester orchestra" fuzzy-matched "The Pete Escovedo
+    Orchestra" (shared word "orchestra"), and "future islands" matched
+    "Elder Island". There's no similarity threshold that reliably tells
+    those apart from genuine variants like the Springsteen example above
+    — both land in roughly the same similarity range. Precision matters
+    more than that occasional recall loss here; official band-name
+    variants are still found correctly by the "Who's On Tour" flow, which
+    resolves one artist at a time via Ticketmaster's own attraction search
+    instead of scanning a big unrelated event list.
+    """
     wanted = {n.lower() for n in artist_names}
     matched = []
     for event in events:
         event_artists_lower = {n.lower() for n in event['artist_names'] if n}
         overlap = wanted & event_artists_lower
-        if not overlap:
-            # Fall back to fuzzy matching for minor name variants (e.g. "Bruce
-            # Springsteen" vs "Bruce Springsteen & The E Street Band"). A plain
-            # substring check is too loose here — it would match "Marina" against
-            # the unrelated "Marina Maximilian" just because one name starts with
-            # the other, so this uses an overall similarity ratio instead, which
-            # penalizes names of very different lengths.
-            for wanted_name in wanted:
-                for ea in event_artists_lower:
-                    ratio = difflib.SequenceMatcher(None, wanted_name, ea).ratio()
-                    if ratio >= NAME_SIMILARITY_CUTOFF:
-                        overlap = {wanted_name}
-                        break
-                if overlap:
-                    break
         if overlap:
             event = dict(event)
             event['matched_favorite_artists'] = sorted(overlap)
