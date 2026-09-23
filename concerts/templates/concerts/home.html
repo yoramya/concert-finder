@@ -6,10 +6,10 @@
         <h3>Welcome back{% if profile %}, {{ profile.display_name }}{% endif %}!</h3>
         <p class="text-muted-light">You're logged into Spotify. What would you like to do?</p>
         <div class="d-flex gap-2 flex-wrap mt-3">
-            <a href="{% url 'concerts:favorite_artists' %}" class="btn btn-outline-light">My favorite artists</a>
-            <a href="{% url 'concerts:followed_artists' %}" class="btn btn-outline-light">My followed artists</a>
-            <a href="{% url 'concerts:on_tour' %}" class="btn btn-outline-light">Who's on tour</a>
-            <a href="{% url 'concerts:search' %}" class="btn btn-outline-light">Search concerts near a city</a>
+            <a href="{% url 'concerts:favorite_artists' %}" class="btn btn-outline-light" title="Artists I listened to lately">My favorite artists</a>
+            <a href="{% url 'concerts:followed_artists' %}" class="btn btn-outline-light" title="Artists I specifically follow">My followed artists</a>
+            <a href="{% url 'concerts:on_tour' %}" class="btn btn-outline-light" title="Which of my followed artists are on tour and where">Who's on tour</a>
+            <a href="{% url 'concerts:search' %}" class="btn btn-outline-light" title="Which of my followed artists has a planned performance in a specific city or within a given radius from it">Search concerts near a city</a>
         </div>
     </div>
 {% else %}
