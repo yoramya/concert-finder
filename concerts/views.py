@@ -258,6 +258,7 @@ def search_by_location(request):
         'unit': request.GET.get('unit', 'miles'),
         'start_date': request.GET.get('start_date', ''),
         'end_date': request.GET.get('end_date', ''),
+        'include_liked': request.GET.get('include_liked') == 'on',
         'submitted': False,
     }
 
@@ -272,7 +273,13 @@ def search_by_location(request):
             artists = spotify_api.get_followed_artists(
                 request.spotify_access_token, limit=settings.FOLLOWED_ARTISTS_LIMIT
             )
-            artist_names = [a['name'] for a in artists]
+            artist_names = {a['name'] for a in artists}
+
+            if context['include_liked']:
+                liked_artists = spotify_api.get_liked_songs_artists(
+                    request.spotify_access_token, track_scan_limit=settings.LIKED_SONGS_SCAN_LIMIT
+                )
+                artist_names |= {a['name'] for a in liked_artists}
 
             all_events = ticketmaster_api.search_events_by_location(
                 city=context['city'],
@@ -284,6 +291,7 @@ def search_by_location(request):
             matched_events = ticketmaster_api.filter_events_by_artists(all_events, artist_names)
             context['events'] = matched_events
             context['total_events_scanned'] = len(all_events)
+            context['artists_checked'] = len(artist_names)
         except geocoding.GeocodingError as exc:
             messages.error(request, str(exc))
             context['events'] = []

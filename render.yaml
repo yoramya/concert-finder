@@ -33,3 +33,5 @@ services:
         value: "500"
       - key: ARTISTS_PER_PAGE
         value: "50"
+      - key: LIKED_SONGS_SCAN_LIMIT
+        value: "1000"

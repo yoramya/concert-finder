@@ -152,7 +152,7 @@ SPOTIFY_CLIENT_SECRET = os.environ.get('SPOTIFY_CLIENT_SECRET', '')
 SPOTIFY_REDIRECT_URI = os.environ.get(
     'SPOTIFY_REDIRECT_URI', 'http://127.0.0.1:8000/callback/'
 )
-SPOTIFY_SCOPES = 'user-top-read user-follow-read user-follow-modify'
+SPOTIFY_SCOPES = 'user-top-read user-follow-read user-follow-modify user-library-read'
 
 # --- Ticketmaster Discovery API ---
 TICKETMASTER_API_KEY = os.environ.get('TICKETMASTER_API_KEY', '')
@@ -165,3 +165,8 @@ FOLLOWED_ARTISTS_LIMIT = int(os.environ.get('FOLLOWED_ARTISTS_LIMIT', '200'))
 
 # Artists per page on the Favorite Artists / Followed Artists grids
 ARTISTS_PER_PAGE = int(os.environ.get('ARTISTS_PER_PAGE', '20'))
+
+# How many Liked Songs tracks to scan (50/page) when the "also check Liked
+# Songs artists" box is ticked on the city search. This is the slow part
+# of that feature, since it's one request per 50 tracks.
+LIKED_SONGS_SCAN_LIMIT = int(os.environ.get('LIKED_SONGS_SCAN_LIMIT', '1000'))

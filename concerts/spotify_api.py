@@ -192,3 +192,45 @@ def get_followed_artists(access_token, limit=50):
 
 def unfollow_artist(access_token, artist_id):
     _delete(access_token, '/me/following', params={'type': 'artist', 'ids': artist_id})
+
+
+def get_liked_songs_artists(access_token, track_scan_limit=1000):
+    """
+    Return the unique artists behind the user's Liked Songs, by scanning
+    up to `track_scan_limit` saved tracks (50 per page, so this is up to
+    track_scan_limit/50 requests — the "can take substantial time" part
+    of this feature, since a large Liked Songs library means many pages).
+    Unlike top/followed artists this has no dedicated "artists" endpoint,
+    so artists are derived from each saved track's artist list and
+    deduplicated by Spotify artist ID.
+    """
+    seen_ids = set()
+    artists = []
+    offset = 0
+    page_size = 50
+    scanned = 0
+    while scanned < track_scan_limit:
+        data = _get(
+            access_token,
+            '/me/tracks',
+            params={'limit': min(page_size, track_scan_limit - scanned), 'offset': offset},
+        )
+        items = data.get('items', [])
+        if not items:
+            break
+        for item in items:
+            track = item.get('track') or {}
+            for a in track.get('artists', []):
+                if a['id'] in seen_ids:
+                    continue
+                seen_ids.add(a['id'])
+                artists.append({
+                    'id': a['id'],
+                    'name': a['name'],
+                    'spotify_url': a.get('external_urls', {}).get('spotify'),
+                })
+        scanned += len(items)
+        offset += page_size
+        if data.get('next') is None:
+            break
+    return artists

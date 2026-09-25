@@ -58,7 +58,11 @@ Visit http://127.0.0.1:8000/.
    Nominatim service) and searched against Ticketmaster's `/events.json`
    using `geoPoint` (a geohash, `concerts/geohash.py`) + `radius` — a real
    geographic radius search. Results are filtered down to shows featuring
-   one of the user's *followed* artists.
+   one of the user's *followed* artists. An optional checkbox also pulls
+   in artists from the user's Liked Songs (`GET /me/tracks`, paginated,
+   deduplicated by artist ID) and matches against those too — off by
+   default since scanning a large Liked Songs library is slow (one
+   request per 50 tracks, capped by `LIKED_SONGS_SCAN_LIMIT`).
 
 ## Notes / limitations
 
@@ -90,3 +94,7 @@ Visit http://127.0.0.1:8000/.
   Redis) behind a multi-process production server.
 - No database models are used for auth — Spotify tokens live in the
   Django session, so logging out just clears the session.
+- Adding a new OAuth scope (as with the Liked Songs feature's
+  `user-library-read`) only takes effect for new logins — anyone with an
+  existing session needs to log out and back in once to re-grant the
+  broader permission before that feature will work for them.
