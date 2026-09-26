@@ -37,7 +37,6 @@
                         <form method="post" action="{% url 'concerts:follow_artist' artist_id=artist.id %}">
                             {% csrf_token %}
                             <input type="hidden" name="artist_name" value="{{ artist.name }}">
-                            <input type="hidden" name="q" value="{{ search_query }}">
                             <button type="submit" class="btn btn-sm btn-outline-success" title="Add to my Spotify Followed Artists">
                                 Follow
                             </button>

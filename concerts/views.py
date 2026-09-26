@@ -137,16 +137,13 @@ def followed_artists(request):
 
 @spotify_login_required
 def follow_artist(request, artist_id):
-    query = request.POST.get('q') or request.GET.get('q')
+    # Deliberately does not carry the search query (`q`) through: after
+    # following someone, the user wants the plain followed-artists list
+    # back, not the same 5 search results still showing on screen.
     page = request.POST.get('page') or request.GET.get('page')
     redirect_url = reverse('concerts:followed_artists')
-    query_args = {}
-    if query:
-        query_args['q'] = query
     if page:
-        query_args['page'] = page
-    if query_args:
-        redirect_url += '?' + urllib.parse.urlencode(query_args)
+        redirect_url += '?' + urllib.parse.urlencode({'page': page})
 
     if request.method != 'POST':
         return redirect(redirect_url)
