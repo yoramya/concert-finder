@@ -1,5 +1,6 @@
 import threading
 import time
+import urllib.parse
 import uuid
 from functools import wraps
 
@@ -17,6 +18,9 @@ from . import geocoding, spotify_api, ticketmaster_api
 # How long a completed/in-progress "on tour" check is kept around so a page
 # refresh or the progress poller can find it again instead of starting over.
 ON_TOUR_JOB_TTL = 60 * 15
+
+# Same idea for a city search job (see search_by_location / _run_search_job).
+SEARCH_JOB_TTL = 60 * 15
 
 
 def spotify_login_required(view_func):
@@ -109,10 +113,52 @@ def followed_artists(request):
     )
     paginator = Paginator(artists, settings.ARTISTS_PER_PAGE)
     page_obj = paginator.get_page(request.GET.get('page'))
-    return render(request, 'concerts/followed_artists.html', {
+
+    context = {
         'page_obj': page_obj,
         'total_artists': len(artists),
-    })
+        'search_query': request.GET.get('q', ''),
+    }
+
+    query = request.GET.get('q', '').strip()
+    if query:
+        followed_ids = {a['id'] for a in artists}
+        try:
+            results = spotify_api.search_artists(request.spotify_access_token, query, limit=5)
+            for r in results:
+                r['already_following'] = r['id'] in followed_ids
+            context['search_results'] = results
+        except requests.HTTPError as exc:
+            messages.error(request, f'Artist search failed: {exc}')
+            context['search_results'] = []
+
+    return render(request, 'concerts/followed_artists.html', context)
+
+
+@spotify_login_required
+def follow_artist(request, artist_id):
+    query = request.POST.get('q') or request.GET.get('q')
+    page = request.POST.get('page') or request.GET.get('page')
+    redirect_url = reverse('concerts:followed_artists')
+    query_args = {}
+    if query:
+        query_args['q'] = query
+    if page:
+        query_args['page'] = page
+    if query_args:
+        redirect_url += '?' + urllib.parse.urlencode(query_args)
+
+    if request.method != 'POST':
+        return redirect(redirect_url)
+
+    artist_name = request.POST.get('artist_name', 'Artist')
+    try:
+        spotify_api.follow_artist(request.spotify_access_token, artist_id)
+        messages.success(request, f'Followed {artist_name} on Spotify.')
+    except requests.HTTPError as exc:
+        messages.error(request, f'Could not follow {artist_name}: {exc}')
+
+    return redirect(redirect_url)
 
 
 @spotify_login_required
@@ -250,8 +296,90 @@ def artist_schedule(request, attraction_id):
     })
 
 
+def _set_search_job(job_id, **fields):
+    state = cache.get(job_id) or {}
+    state.update(fields)
+    cache.set(job_id, state, SEARCH_JOB_TTL)
+
+
+def _run_search_job(job_id, access_token, params):
+    """
+    Runs in a background thread. Two potentially-slow phases, each with
+    its own progress reported via a callback: scanning Liked Songs (if
+    requested) and paging through Ticketmaster's event search. Matching
+    the results against artist names is local/instant, no callback needed.
+    """
+    try:
+        artists = spotify_api.get_followed_artists(access_token, limit=settings.FOLLOWED_ARTISTS_LIMIT)
+        artist_names = {a['name'] for a in artists}
+
+        if params['include_liked']:
+            _set_search_job(job_id, phase='liked_songs', phase_checked=0, phase_total=1)
+            liked_artists = spotify_api.get_liked_songs_artists(
+                access_token,
+                track_scan_limit=settings.LIKED_SONGS_SCAN_LIMIT,
+                progress_callback=lambda scanned, total: _set_search_job(
+                    job_id, phase='liked_songs', phase_checked=scanned, phase_total=total
+                ),
+            )
+            artist_names |= {a['name'] for a in liked_artists}
+
+        _set_search_job(job_id, phase='events', phase_checked=0, phase_total=1)
+        all_events = ticketmaster_api.search_events_by_location(
+            city=params['city'],
+            radius=params['radius'],
+            unit=params['unit'],
+            start_date=params['start_date'],
+            end_date=params['end_date'],
+            progress_callback=lambda done, total: _set_search_job(
+                job_id, phase='events', phase_checked=done, phase_total=total
+            ),
+        )
+        matched_events = ticketmaster_api.filter_events_by_artists(all_events, artist_names)
+
+        _set_search_job(
+            job_id, phase='done', phase_checked=1, phase_total=1, done=True, error=None,
+            events=matched_events, total_events_scanned=len(all_events),
+            artists_checked=len(artist_names),
+        )
+    except geocoding.GeocodingError as exc:
+        _set_search_job(job_id, phase='done', done=True, error=str(exc), events=[])
+    except ticketmaster_api.TicketmasterConfigError as exc:
+        _set_search_job(job_id, phase='done', done=True, error=str(exc), events=[])
+    except requests.HTTPError as exc:
+        _set_search_job(job_id, phase='done', done=True, error=f'Search failed: {exc}', events=[])
+
+
 @spotify_login_required
 def search_by_location(request):
+    job_id = request.GET.get('job')
+
+    if job_id:
+        job = cache.get(job_id)
+        if not job:
+            messages.error(request, 'That search has expired. Please search again.')
+            return redirect('concerts:search')
+
+        params = job.get('params', {})
+        if job.get('done'):
+            if job.get('error'):
+                messages.error(request, job['error'])
+            return render(request, 'concerts/search.html', {
+                **params,
+                'submitted': True,
+                'job_done': True,
+                'events': job.get('events', []),
+                'total_events_scanned': job.get('total_events_scanned', 0),
+                'artists_checked': job.get('artists_checked', 0),
+            })
+
+        return render(request, 'concerts/search.html', {
+            **params,
+            'submitted': True,
+            'job_done': False,
+            'job_id': job_id,
+        })
+
     context = {
         'city': request.GET.get('city', ''),
         'radius': request.GET.get('radius', '25'),
@@ -263,43 +391,45 @@ def search_by_location(request):
     }
 
     if request.GET.get('city') and request.GET.get('start_date') and request.GET.get('end_date'):
-        context['submitted'] = True
         try:
             radius = int(request.GET.get('radius', 25))
         except ValueError:
             radius = 25
 
-        try:
-            artists = spotify_api.get_followed_artists(
-                request.spotify_access_token, limit=settings.FOLLOWED_ARTISTS_LIMIT
-            )
-            artist_names = {a['name'] for a in artists}
-
-            if context['include_liked']:
-                liked_artists = spotify_api.get_liked_songs_artists(
-                    request.spotify_access_token, track_scan_limit=settings.LIKED_SONGS_SCAN_LIMIT
-                )
-                artist_names |= {a['name'] for a in liked_artists}
-
-            all_events = ticketmaster_api.search_events_by_location(
-                city=context['city'],
-                radius=radius,
-                unit=context['unit'],
-                start_date=context['start_date'],
-                end_date=context['end_date'],
-            )
-            matched_events = ticketmaster_api.filter_events_by_artists(all_events, artist_names)
-            context['events'] = matched_events
-            context['total_events_scanned'] = len(all_events)
-            context['artists_checked'] = len(artist_names)
-        except geocoding.GeocodingError as exc:
-            messages.error(request, str(exc))
-            context['events'] = []
-        except ticketmaster_api.TicketmasterConfigError as exc:
-            messages.error(request, str(exc))
-            context['events'] = []
-        except requests.HTTPError as exc:
-            messages.error(request, f'Search failed: {exc}')
-            context['events'] = []
+        params = {
+            'city': context['city'],
+            'radius': radius,
+            'unit': context['unit'],
+            'start_date': context['start_date'],
+            'end_date': context['end_date'],
+            'include_liked': context['include_liked'],
+        }
+        new_job_id = uuid.uuid4().hex
+        cache.set(new_job_id, {
+            'phase': 'starting', 'phase_checked': 0, 'phase_total': 1,
+            'done': False, 'params': params,
+        }, SEARCH_JOB_TTL)
+        threading.Thread(
+            target=_run_search_job,
+            args=(new_job_id, request.spotify_access_token, params),
+            daemon=True,
+        ).start()
+        # Redirecting to the job URL (rather than rendering it inline) means
+        # a page refresh mid-search resumes polling the same job instead of
+        # kicking off a duplicate one.
+        return redirect(f"{reverse('concerts:search')}?job={new_job_id}")
 
     return render(request, 'concerts/search.html', context)
+
+
+@spotify_login_required
+def search_progress(request, job_id):
+    job = cache.get(job_id)
+    if not job:
+        return JsonResponse({'phase': 'done', 'phase_checked': 0, 'phase_total': 1, 'done': True})
+    return JsonResponse({
+        'phase': job.get('phase', 'starting'),
+        'phase_checked': job.get('phase_checked', 0),
+        'phase_total': job.get('phase_total', 1),
+        'done': job.get('done', False),
+    })

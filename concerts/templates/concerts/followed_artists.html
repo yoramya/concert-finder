@@ -5,6 +5,55 @@
 <p class="text-muted-light">
     Artists you follow on Spotify ({{ total_artists }} total). Unfollowing here unfollows them on Spotify too.
 </p>
+
+<form method="get" class="card p-3 mb-4">
+    <label class="form-label">Follow a new artist</label>
+    <div class="d-flex gap-2">
+        <input type="text" name="q" class="form-control" placeholder="Artist name" value="{{ search_query }}">
+        <button type="submit" class="btn btn-outline-light text-nowrap">Find on Spotify</button>
+    </div>
+</form>
+
+{% if search_query %}
+<div class="mb-4">
+    <h5>Results for "{{ search_query }}"</h5>
+    <div class="row row-cols-2 row-cols-md-4 row-cols-lg-5 g-3">
+        {% for artist in search_results %}
+        <div class="col">
+            <div class="card h-100">
+                {% if artist.image %}
+                <img src="{{ artist.image }}" class="card-img-top" alt="{{ artist.name }}">
+                {% endif %}
+                <div class="card-body">
+                    <h6 class="card-title">{{ artist.name }}</h6>
+                    <p class="card-text small text-muted-light">{{ artist.genres|slice:":2"|join:", " }}</p>
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        {% if artist.spotify_url %}
+                        <a href="{{ artist.spotify_url }}" target="_blank" class="small">Open in Spotify</a>
+                        {% endif %}
+                        {% if artist.already_following %}
+                        <span class="badge bg-secondary">Already following</span>
+                        {% else %}
+                        <form method="post" action="{% url 'concerts:follow_artist' artist_id=artist.id %}">
+                            {% csrf_token %}
+                            <input type="hidden" name="artist_name" value="{{ artist.name }}">
+                            <input type="hidden" name="q" value="{{ search_query }}">
+                            <button type="submit" class="btn btn-sm btn-outline-success" title="Add to my Spotify Followed Artists">
+                                Follow
+                            </button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <p>No Spotify artists matched "{{ search_query }}".</p>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
 <div class="row row-cols-2 row-cols-md-4 row-cols-lg-5 g-3">
     {% for artist in page_obj %}
     <div class="col">

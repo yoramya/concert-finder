@@ -171,7 +171,8 @@ def get_events_for_attraction(attraction_id, size=50):
     return [_format_event(e) for e in events]
 
 
-def search_events_by_location(city, radius, unit, start_date, end_date, max_pages=5, page_size=200):
+def search_events_by_location(city, radius, unit, start_date, end_date, max_pages=5, page_size=200,
+                               progress_callback=None):
     """
     All music events within `radius` (unit: 'miles' or 'km') of `city`
     between start_date and end_date (YYYY-MM-DD strings). `city` is
@@ -179,6 +180,10 @@ def search_events_by_location(city, radius, unit, start_date, end_date, max_page
     Ticketmaster's `geoPoint`, since Ticketmaster's own `city` filter is a
     literal name match, not a real radius search. Raises
     geocoding.GeocodingError if the city name can't be resolved.
+
+    If given, progress_callback(pages_done, total_pages) is called after
+    every page, where `total_pages` is the smaller of Ticketmaster's real
+    page count (learned from the first page) and max_pages.
     """
     lat, lon = geocoding.geocode_city(city)
     geo_point = geohash.encode(lat, lon, precision=9)
@@ -186,6 +191,7 @@ def search_events_by_location(city, radius, unit, start_date, end_date, max_page
     all_events = []
     start_dt = f'{start_date}T00:00:00Z'
     end_dt = f'{end_date}T23:59:59Z'
+    total_pages_estimate = max_pages
 
     for page in range(max_pages):
         data = _get('/events.json', {
@@ -204,6 +210,9 @@ def search_events_by_location(city, radius, unit, start_date, end_date, max_page
 
         page_info = data.get('page', {})
         total_pages = page_info.get('totalPages', 1)
+        total_pages_estimate = min(total_pages, max_pages) or 1
+        if progress_callback:
+            progress_callback(min(page + 1, total_pages_estimate), total_pages_estimate)
         if page + 1 >= total_pages:
             break
 

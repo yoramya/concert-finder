@@ -115,6 +115,16 @@ def _delete(access_token, path, params=None):
     resp.raise_for_status()
 
 
+def _put(access_token, path, params=None):
+    resp = requests.put(
+        f'{API_BASE}{path}',
+        headers={'Authorization': f'Bearer {access_token}'},
+        params=params or {},
+        timeout=10,
+    )
+    resp.raise_for_status()
+
+
 def get_current_user_profile(access_token):
     return _get(access_token, '/me')
 
@@ -194,7 +204,28 @@ def unfollow_artist(access_token, artist_id):
     _delete(access_token, '/me/following', params={'type': 'artist', 'ids': artist_id})
 
 
-def get_liked_songs_artists(access_token, track_scan_limit=1000):
+def follow_artist(access_token, artist_id):
+    _put(access_token, '/me/following', params={'type': 'artist', 'ids': artist_id})
+
+
+def search_artists(access_token, query, limit=5):
+    """
+    Search Spotify's catalog for artists matching a typed-in name. Needs
+    no special scope beyond a valid token, unlike most other calls here.
+    """
+    data = _get(access_token, '/search', params={'q': query, 'type': 'artist', 'limit': limit})
+    items = data.get('artists', {}).get('items', [])
+    return [{
+        'id': a['id'],
+        'name': a['name'],
+        'genres': a.get('genres', []),
+        'image': (a.get('images') or [{}])[0].get('url'),
+        'spotify_url': a.get('external_urls', {}).get('spotify'),
+        'popularity': a.get('popularity'),
+    } for a in items]
+
+
+def get_liked_songs_artists(access_token, track_scan_limit=1000, progress_callback=None):
     """
     Return the unique artists behind the user's Liked Songs, by scanning
     up to `track_scan_limit` saved tracks (50 per page, so this is up to
@@ -203,18 +234,25 @@ def get_liked_songs_artists(access_token, track_scan_limit=1000):
     Unlike top/followed artists this has no dedicated "artists" endpoint,
     so artists are derived from each saved track's artist list and
     deduplicated by Spotify artist ID.
+
+    If given, progress_callback(scanned, total) is called after every
+    page, where `total` is the smaller of the user's real saved-track
+    count (learned from the first page) and track_scan_limit.
     """
     seen_ids = set()
     artists = []
     offset = 0
     page_size = 50
     scanned = 0
+    total_estimate = track_scan_limit
     while scanned < track_scan_limit:
         data = _get(
             access_token,
             '/me/tracks',
             params={'limit': min(page_size, track_scan_limit - scanned), 'offset': offset},
         )
+        if offset == 0 and data.get('total') is not None:
+            total_estimate = min(data['total'], track_scan_limit)
         items = data.get('items', [])
         if not items:
             break
@@ -231,6 +269,8 @@ def get_liked_songs_artists(access_token, track_scan_limit=1000):
                 })
         scanned += len(items)
         offset += page_size
+        if progress_callback:
+            progress_callback(min(scanned, total_estimate), total_estimate)
         if data.get('next') is None:
             break
     return artists

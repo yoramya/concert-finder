@@ -62,7 +62,15 @@ Visit http://127.0.0.1:8000/.
    in artists from the user's Liked Songs (`GET /me/tracks`, paginated,
    deduplicated by artist ID) and matches against those too — off by
    default since scanning a large Liked Songs library is slow (one
-   request per 50 tracks, capped by `LIKED_SONGS_SCAN_LIMIT`).
+   request per 50 tracks, capped by `LIKED_SONGS_SCAN_LIMIT`). This search
+   runs as a background job with a live progress bar
+   (`/search/progress/<job_id>/`), the same pattern as On Tour below, since
+   the Liked Songs scan and Ticketmaster paging can both take a while.
+5. **Follow a new artist** — the Followed Artists page has a "Follow a new
+   artist" box that searches Spotify's catalog (`GET /search?type=artist`,
+   no special scope needed) and lets you follow a result directly
+   (`PUT /me/following`), showing "Already following" instead of a button
+   for artists you already follow (matched by Spotify artist ID).
 
 ## Notes / limitations
 
@@ -88,10 +96,15 @@ Visit http://127.0.0.1:8000/.
   a while for users who follow a lot of artists. That check runs in a
   background thread (`concerts/views.py::_run_on_tour_check`), with
   progress stored in Django's cache and polled by the page
-  (`/on-tour/progress/<job_id>/`) to drive a live progress bar. This
-  relies on the default `LocMemCache`, which is per-process — fine for
-  `manage.py runserver`, but would need a shared cache backend (e.g.
-  Redis) behind a multi-process production server.
+  (`/on-tour/progress/<job_id>/`) to drive a live progress bar. City
+  search (`_run_search_job`) uses the same job/cache/poll pattern for its
+  Liked Songs + Ticketmaster paging phases. Both rely on the default
+  `LocMemCache`, which is per-process — fine for `manage.py runserver` and
+  for the single-worker-process Render deploy (see `render.yaml`), but
+  would need a shared cache backend (e.g. Redis) if ever scaled to
+  multiple worker processes, or the progress bars would silently break
+  (a poll request could land on a different process than the one running
+  the background thread).
 - No database models are used for auth — Spotify tokens live in the
   Django session, so logging out just clears the session.
 - Adding a new OAuth scope (as with the Liked Songs feature's
